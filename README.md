@@ -34,7 +34,7 @@ This pipeline implements a **staged approach** to sheep pangenome construction, 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/sheep-pangenome
+git clone https://github.com/alarawms/sheep-pangenome
 cd sheep-pangenome
 
 # Create your samplesheet
@@ -51,9 +51,6 @@ nextflow run . --input sheep_samples.csv -profile docker
 # Or with SLURM cluster (general)
 nextflow run . --input sheep_samples.csv -profile slurm,singularity
 
-# KAUST Ibex cluster
-export SLURM_ACCOUNT="k1234"
-nextflow run . --input sheep_samples.csv -profile slurm,singularity -work-dir /ibex/user/$USER/nextflow-work
 ```
 
 ### Test with Provided Data

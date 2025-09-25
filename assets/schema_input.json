@@ -1,0 +1,50 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://raw.githubusercontent.com/alarawms/sheep-pangenome/master/assets/schema_input.json",
+    "title": "alarawms/sheep-pangenome pipeline - params.input schema",
+    "description": "Schema for the file provided with params.input",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "sample": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Sample name must be provided and cannot contain spaces",
+                "meta": ["id"]
+            },
+            "accession": {
+                "type": "string",
+                "pattern": "^(GCF_|GCA_|PRJNA|PRJDB|PRJEB)?[A-Z0-9._]+$",
+                "errorMessage": "NCBI accession number must be valid format (GCF_, GCA_, PRJNA, etc.)"
+            },
+            "fasta": {
+                "type": "string",
+                "format": "file-path",
+                "pattern": "^\\S+\\.(fa|fasta|fna)(\\.gz)?$",
+                "errorMessage": "FASTA file must be provided, cannot contain spaces and must have extension '.fa', '.fasta', '.fna' with optional '.gz'"
+            },
+            "breed": {
+                "type": "string",
+                "errorMessage": "Breed information should be provided as a string"
+            },
+            "population": {
+                "type": "string",
+                "enum": ["European", "Asian", "African", "Wild", "Mixed", "Regional"],
+                "errorMessage": "Population must be one of: European, Asian, African, Wild, Mixed, Regional"
+            },
+            "geographic_origin": {
+                "type": "string",
+                "errorMessage": "Geographic origin should be provided as a string"
+            }
+        },
+        "required": ["sample"],
+        "anyOf": [
+            {"required": ["accession"]},
+            {"required": ["fasta"]}
+        ],
+        "errorMessage": {
+            "anyOf": "Each sample must have either 'accession' for download or 'fasta' for local file"
+        }
+    }
+}
