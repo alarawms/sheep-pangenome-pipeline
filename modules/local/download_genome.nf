@@ -26,12 +26,30 @@ process DOWNLOAD_GENOME {
     # Set NCBI API key if provided
     ${params.ncbi_api_key ? "export NCBI_API_KEY=${params.ncbi_api_key}" : ""}
 
-    # Download genome using NCBI datasets with API key support
-    datasets download genome accession ${accession_clean} \\
-        --include genome \\
-        --filename ${accession_clean}.zip \\
-        ${api_key} \\
-        ${args}
+    # Add random delay to reduce concurrent load on NCBI
+    sleep \$((RANDOM % 10 + 5))
+
+    # Download genome using NCBI datasets with API key support and retry logic
+    for attempt in 1 2 3; do
+        echo "Download attempt \$attempt for ${accession_clean}"
+        if datasets download genome accession ${accession_clean} \\
+            --include genome \\
+            --filename ${accession_clean}.zip \\
+            ${api_key} \\
+            ${args}; then
+            echo "Download successful on attempt \$attempt"
+            break
+        else
+            exit_code=\$?
+            echo "Download failed on attempt \$attempt (exit code: \$exit_code)"
+            if [ \$attempt -eq 3 ]; then
+                echo "All download attempts failed for ${accession_clean}"
+                exit \$exit_code
+            fi
+            # Wait longer between retries
+            sleep \$((attempt * 15))
+        fi
+    done
 
     # Extract and process files
     unzip -q ${accession_clean}.zip

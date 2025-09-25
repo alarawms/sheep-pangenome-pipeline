@@ -64,6 +64,14 @@
                     "description": "NCBI API key for increased rate limits (optional but recommended)",
                     "help_text": "Get your API key from https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/",
                     "fa_icon": "fas fa-key"
+                },
+                "download_max_forks": {
+                    "type": "integer",
+                    "default": 1,
+                    "minimum": 1,
+                    "maximum": 3,
+                    "description": "Maximum concurrent genome downloads (1=sequential, higher values risk rate limiting)",
+                    "fa_icon": "fas fa-tasks"
                 }
             }
         },
