@@ -1,0 +1,16 @@
+sample,accession,breed,population,geographic_origin,quality_score,genome_size_mb,busco_score,publication_year
+rambouillet_ref,GCF_016772045.1,Rambouillet,European,United_States,A+,2847,95.2,2021
+texel_v4,GCF_000298735.2,Texel,European,Netherlands,B+,2615,92.8,2014
+hu_sheep,GCA_001704415.1,Hu,Asian,China,B,2734,89.5,2016
+guide_blackfur,JBEJUG01000000,Guide_Black-Fur,Tibetan,China,A,2891,91.3,2023
+nguni,JBLGTL00000000,Nguni,African,South_Africa,A,2756,90.1,2022
+dorper,GCA_902806625.1,Dorper,African,South_Africa,B,2698,88.7,2019
+mouflon_asiatic,GCA_001704135.1,Asiatic_Mouflon,Wild,Iran,B,2812,87.9,2016
+bighorn_sheep,GCA_016772045.3,Bighorn,Wild,North_America,B-,2889,86.4,2021
+dall_sheep,GCA_018350175.1,Dall,Wild,North_America,C+,2734,84.2,2021
+snow_sheep,GCA_014754425.1,Snow_Sheep,Wild,Russia,C,2623,82.1,2020
+urial,GCA_018350165.1,Urial,Wild,Central_Asia,C+,2789,83.7,2021
+european_mouflon,GCA_019175395.1,European_Mouflon,Feral,Europe,B-,2801,85.3,2022
+merino_aus,GCA_902806645.1,Merino,European,Australia,B,2712,89.8,2019
+suffolk,GCA_902806655.1,Suffolk,European,United_Kingdom,B,2698,88.9,2019
+romanov,GCA_902806665.1,Romanov,European,Russia,B+,2734,91.2,2019
