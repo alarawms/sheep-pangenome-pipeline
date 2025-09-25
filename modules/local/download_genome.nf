@@ -2,7 +2,7 @@ process DOWNLOAD_GENOME {
     tag "$meta.id"
     label 'process_medium'
 
-    container "quay.io/biocontainers/ncbi-datasets-cli:16.9.0--h2d05d04_0"
+    container "biocontainers/ncbi-datasets-cli:16.22.1_cv1"
 
     input:
     tuple val(meta), val(accession)
