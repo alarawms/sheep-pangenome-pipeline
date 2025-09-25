@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Sheep Pangenome Pipeline: Staged Implementation for Comprehensive Comparative Genomics"
+version: "1.0.0-stage1"
+date-released: "2024-09-25"
+url: "https://github.com/USERNAME/sheep-pangenome-pipeline"
+repository-code: "https://github.com/USERNAME/sheep-pangenome-pipeline"
+abstract: >-
+  A comprehensive Nextflow pipeline for sheep pangenome construction and
+  comparative genomics analysis. Features staged implementation with
+  comprehensive validation, KAUST Ibex cluster optimization, and
+  publication-ready outputs. Currently implements Stage 1 (Data Acquisition
+  & Preparation) with automatic genome downloading, quality validation,
+  and scientific validation gates.
+keywords:
+  - bioinformatics
+  - pangenome
+  - comparative genomics
+  - sheep genomics
+  - nextflow
+  - SLURM
+  - HPC
+  - KAUST
+license: MIT
+authors:
+  - family-names: "Your Last Name"
+    given-names: "Your First Name"
+    orcid: "https://orcid.org/0000-0000-0000-0000"  # Replace with your ORCID
+    email: "your.email@example.com"
+    affiliation: "KAUST"
+  - name: "Claude Code AI Assistant"
+    website: "https://claude.ai/code"
+    role: "development-assistant"
