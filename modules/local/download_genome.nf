@@ -20,12 +20,17 @@ process DOWNLOAD_GENOME {
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
     def accession_clean = accession.trim()
+    def api_key = params.ncbi_api_key ? "--api-key ${params.ncbi_api_key}" : ""
 
     """
-    # Download genome using NCBI datasets
+    # Set NCBI API key if provided
+    ${params.ncbi_api_key ? "export NCBI_API_KEY=${params.ncbi_api_key}" : ""}
+
+    # Download genome using NCBI datasets with API key support
     datasets download genome accession ${accession_clean} \\
         --include genome \\
         --filename ${accession_clean}.zip \\
+        ${api_key} \\
         ${args}
 
     # Extract and process files

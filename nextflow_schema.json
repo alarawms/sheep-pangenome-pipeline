@@ -58,6 +58,12 @@
                     "maximum": 10,
                     "description": "Number of download retry attempts",
                     "fa_icon": "fas fa-redo"
+                },
+                "ncbi_api_key": {
+                    "type": "string",
+                    "description": "NCBI API key for increased rate limits (optional but recommended)",
+                    "help_text": "Get your API key from https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/",
+                    "fa_icon": "fas fa-key"
                 }
             }
         },

@@ -140,10 +140,41 @@ python3 scripts/stage1_test.py
 ```bash
 --max_download_time    # Download timeout (default: 30m)
 --download_retries     # Retry attempts (default: 3)
+--ncbi_api_key         # NCBI API key for increased rate limits (recommended)
 --validation_strict    # Strict validation mode (default: true)
 --genome_size_min      # Minimum genome size (default: 2.4e9)
 --genome_size_max      # Maximum genome size (default: 3.2e9)
 ```
+
+### 🔑 NCBI API Key Setup
+
+To avoid rate limiting when downloading genomes, it's highly recommended to use an NCBI API key:
+
+#### 1. Get Your API Key
+Visit the [NCBI API Key Management](https://www.ncbi.nlm.nih.gov/account/settings/) page and:
+- Create an NCBI account or log in
+- Generate a new API key in your account settings
+
+#### 2. Use API Key with Pipeline
+```bash
+# Method 1: Command line parameter
+nextflow run . --input sheep_samples.csv --ncbi_api_key YOUR_API_KEY -profile docker
+
+# Method 2: Environment variable
+export NCBI_API_KEY=YOUR_API_KEY
+nextflow run . --input sheep_samples.csv -profile docker
+
+# Method 3: Config file
+echo 'params.ncbi_api_key = "YOUR_API_KEY"' >> nextflow.config
+```
+
+#### 3. Benefits of API Key
+- **Higher Rate Limits**: 10 requests/second vs 3 requests/second
+- **No 429 Errors**: Eliminates "Too Many Requests" failures
+- **Faster Downloads**: Parallel genome downloading without throttling
+- **Production Ready**: Suitable for large-scale analyses
+
+⚠️ **Security Note**: Never commit API keys to version control. Use environment variables or local config files.
 
 ## 🏗️ Architecture Overview
 

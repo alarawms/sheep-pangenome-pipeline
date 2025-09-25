@@ -32,6 +32,7 @@ if (params.help) {
     log.info "  --outdir        : Output directory (default: ./results)"
     log.info "  --stage         : Pipeline stage to run (default: 1)"
     log.info "  --max_download_time : Maximum download time per genome (default: 30m)"
+    log.info "  --ncbi_api_key  : NCBI API key for increased rate limits (recommended)"
     log.info ""
     log.info "Example samplesheet format:"
     log.info "sample,accession,breed,population,geographic_origin"
