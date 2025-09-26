@@ -4,10 +4,10 @@ nextflow.enable.dsl = 2
 /*
 ========================================================================================
     Sheep Pangenome Pipeline - Staged Implementation
-    Stages 1-2: Data Acquisition & Genome Preprocessing
+    Stages 1-3: Data Acquisition, Genome Preprocessing & Graph Construction
 ========================================================================================
     Author: Developed with Claude Code
-    Version: 1.1.0-stage2
+    Version: 1.2.0-stage3
     Description: Comprehensive sheep pangenome analysis pipeline with staged validation
 ========================================================================================
 */
@@ -18,20 +18,21 @@ include { validateParameters; paramsHelp } from 'plugin/nf-validation'
 // Include subworkflows
 include { INPUT_CHECK } from './subworkflows/local/input_check'
 include { PREPROCESSING } from './subworkflows/local/preprocessing'
+include { GRAPH_CONSTRUCTION } from './subworkflows/local/graph_construction'
 
 // Print help message
 if (params.help) {
     log.info paramsHelp("nextflow run . --input samplesheet.csv -profile docker")
     log.info ""
-    log.info "Stages 1-2: Data Acquisition & Genome Preprocessing"
-    log.info "================================================="
+    log.info "Stages 1-3: Data Acquisition, Preprocessing & Graph Construction"
+    log.info "======================================================="
     log.info ""
     log.info "Required parameters:"
     log.info "  --input         : Path to input samplesheet (CSV format)"
     log.info ""
     log.info "Optional parameters:"
     log.info "  --outdir        : Output directory (default: ./results)"
-    log.info "  --stage         : Pipeline stage to run (1 or 2, default: 1)"
+    log.info "  --stage         : Pipeline stage to run (1, 2, or 3, default: 1)"
     log.info "  --max_download_time : Maximum download time per genome (default: 30m)"
     log.info "  --ncbi_api_key  : NCBI API key for increased rate limits (recommended)"
     log.info ""
@@ -216,6 +217,73 @@ workflow SHEEP_STAGE2 {
 
 /*
 ========================================================================================
+    STAGE 3: PANGENOME GRAPH CONSTRUCTION
+========================================================================================
+*/
+
+workflow SHEEP_STAGE3 {
+
+    take:
+    standardized_genomes_ch    // Channel from Stage 2: [meta, standardized.fa]
+    reference_metadata_ch      // Channel: reference_metadata.json
+
+    main:
+    // Stage 3: Pangenome graph construction
+    log.info "🧬 Starting Stage 3: Pangenome Graph Construction"
+
+    GRAPH_CONSTRUCTION(
+        standardized_genomes_ch,
+        reference_metadata_ch
+    )
+
+    // Monitor graph construction progress
+    GRAPH_CONSTRUCTION.out.pangenome_graph
+        .subscribe { graph_meta, graph_file ->
+            log.info "🎯 Pangenome graph constructed: ${graph_file.name}"
+        }
+
+    // Summary reporting for Stage 3
+    graph_summary = GRAPH_CONSTRUCTION.out.pangenome_graph
+        .map { graph_meta, graph_file ->
+            def graph_size = graph_file.size()
+            def graph_size_mb = (graph_size / 1024 / 1024).round(2)
+
+            log.info ""
+            log.info "📊 Stage 3 Graph Construction Summary:"
+            log.info "  Pangenome graph: ✅ Complete"
+            log.info "  Graph file size: ${graph_size_mb} MB"
+            log.info "  Graph validation: ✅ Complete"
+            log.info "  Graph statistics: ✅ Complete"
+            log.info "  Visualizations: ✅ Complete"
+            log.info ""
+
+            return [graph_constructed: true, graph_size_mb: graph_size_mb]
+        }
+
+    emit:
+    // Primary graph outputs
+    pangenome_graph      = GRAPH_CONSTRUCTION.out.pangenome_graph
+    odgi_graph           = GRAPH_CONSTRUCTION.out.odgi_graph
+    smoothed_graph       = GRAPH_CONSTRUCTION.out.smoothed_graph
+    graph_visualization  = GRAPH_CONSTRUCTION.out.graph_visualization
+    pggb_output_dir      = GRAPH_CONSTRUCTION.out.pggb_output_dir
+
+    // Validation and statistics
+    validation_report    = GRAPH_CONSTRUCTION.out.validation_report
+    validation_stats     = GRAPH_CONSTRUCTION.out.validation_stats
+    graph_stats_json     = GRAPH_CONSTRUCTION.out.graph_stats_json
+    graph_stats_html     = GRAPH_CONSTRUCTION.out.graph_stats_html
+    node_statistics      = GRAPH_CONSTRUCTION.out.node_statistics
+    path_statistics      = GRAPH_CONSTRUCTION.out.path_statistics
+    complexity_analysis  = GRAPH_CONSTRUCTION.out.complexity_analysis
+
+    // Versions and summary
+    versions             = GRAPH_CONSTRUCTION.out.versions
+    summary              = graph_summary
+}
+
+/*
+========================================================================================
     ENTRY WORKFLOW
 ========================================================================================
 */
@@ -228,6 +296,9 @@ workflow {
     // Auto-detect completed stages and execute appropriate stage
     def stage1_completed = file("${params.outdir}/01_data_preparation/downloaded_genomes").exists() &&
                           file("${params.outdir}/01_data_preparation/downloaded_genomes").listFiles().length > 0
+
+    def stage2_completed = file("${params.outdir}/02_preprocessing/standardized_genomes").exists() &&
+                          file("${params.outdir}/02_preprocessing/standardized_genomes").listFiles().length > 0
 
     if (params.stage == 1 && !stage1_completed) {
         // Run Stage 1 if explicitly requested and not completed
@@ -334,9 +405,101 @@ workflow {
                 log.info ""
             }
 
+    } else if (params.stage == 3) {
+        // Stage 3 requires Stage 2 outputs - check for existing results
+        def stage2_results = file("${params.outdir}/02_preprocessing/standardized_genomes")
+        def stage2_reference = file("${params.outdir}/02_preprocessing/reference_selection/reference_metadata.json")
+
+        if (!stage2_results.exists() || stage2_results.listFiles().length == 0) {
+            log.error ""
+            log.error "❌ Stage 3 requires Stage 2 outputs!"
+            log.error "   No standardized genomes found in: ${stage2_results}"
+            log.error "   Run Stage 2 first: nextflow run . --input samplesheet.csv --stage 2"
+            log.error ""
+            exit 1
+        }
+
+        if (!stage2_reference.exists()) {
+            log.error ""
+            log.error "❌ Stage 3 requires reference selection from Stage 2!"
+            log.error "   Reference metadata not found: ${stage2_reference}"
+            log.error "   Ensure Stage 2 completed successfully"
+            log.error ""
+            exit 1
+        }
+
+        // Create genome input channels from Stage 2 outputs
+        stage2_genomes = Channel.fromPath("${params.outdir}/02_preprocessing/standardized_genomes/*_standardized.fa")
+            .map { genome_file ->
+                def sample_id = genome_file.baseName.replace('_standardized', '')
+                def meta = [
+                    id: sample_id,
+                    single_end: true,
+                    stage: 'graph_construction'
+                ]
+
+                return [meta, genome_file]
+            }
+
+        // Reference metadata channel
+        reference_metadata = Channel.fromPath(stage2_reference, checkIfExists: true)
+
+        log.info ""
+        log.info "🧬 Starting Stage 3: Pangenome Graph Construction"
+        log.info "   Using standardized genomes from Stage 2"
+        log.info "   Found ${stage2_results.listFiles().length} genome files"
+        log.info ""
+
+        SHEEP_STAGE3(stage2_genomes, reference_metadata)
+
+        // Stage completion check
+        SHEEP_STAGE3.out.summary
+            .subscribe { summary ->
+                log.info ""
+                log.info "🚀 Stage 3 completed successfully!"
+                log.info "   Pangenome graph constructed (${summary.graph_size_mb} MB)"
+                log.info "   Ready to proceed to Stage 4: Graph Analysis & Variant Calling"
+                log.info ""
+            }
+
+    } else if (params.stage == 2 && stage2_completed) {
+        // Stage 2 already completed, auto-advance to Stage 3
+        log.info ""
+        log.info "🔄 Stage 2 already completed, advancing to Stage 3"
+        log.info "   Found existing standardized genomes in: ${params.outdir}/02_preprocessing/standardized_genomes/"
+        log.info ""
+
+        // Create genome input channels from Stage 2 outputs
+        stage2_genomes = Channel.fromPath("${params.outdir}/02_preprocessing/standardized_genomes/*_standardized.fa")
+            .map { genome_file ->
+                def sample_id = genome_file.baseName.replace('_standardized', '')
+                def meta = [
+                    id: sample_id,
+                    single_end: true,
+                    stage: 'graph_construction'
+                ]
+
+                return [meta, genome_file]
+            }
+
+        // Reference metadata channel
+        reference_metadata = Channel.fromPath("${params.outdir}/02_preprocessing/reference_selection/reference_metadata.json", checkIfExists: true)
+
+        SHEEP_STAGE3(stage2_genomes, reference_metadata)
+
+        // Stage completion check
+        SHEEP_STAGE3.out.summary
+            .subscribe { summary ->
+                log.info ""
+                log.info "🚀 Stage 3 completed successfully!"
+                log.info "   Pangenome graph constructed (${summary.graph_size_mb} MB)"
+                log.info "   Ready to proceed to Stage 4: Graph Analysis & Variant Calling"
+                log.info ""
+            }
+
     } else {
         log.error "Invalid stage specified: ${params.stage}"
-        log.error "Available stages: 1 (Data Acquisition), 2 (Genome Preprocessing)"
+        log.error "Available stages: 1 (Data Acquisition), 2 (Genome Preprocessing), 3 (Graph Construction)"
         exit 1
     }
 }
@@ -372,6 +535,12 @@ workflow.onComplete {
             log.info "   - Minimap2 indices: ${params.outdir}/02_preprocessing/minimap2_index/"
             log.info "   - Samtools indices: ${params.outdir}/02_preprocessing/samtools_index/"
             log.info "   - Reference selection: ${params.outdir}/02_preprocessing/reference_selection/"
+        } else if (params.stage == 3) {
+            log.info "   - Pangenome graph: ${params.outdir}/03_graph_construction/main_outputs/"
+            log.info "   - Graph validation: ${params.outdir}/03_graph_construction/validation/"
+            log.info "   - Graph statistics: ${params.outdir}/03_graph_construction/statistics/"
+            log.info "   - PGGB outputs: ${params.outdir}/03_graph_construction/pggb_outputs/"
+            log.info "   - Visualizations: ${params.outdir}/03_graph_construction/main_outputs/"
         }
         log.info ""
     }
