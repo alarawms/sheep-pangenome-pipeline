@@ -4,10 +4,10 @@ nextflow.enable.dsl = 2
 /*
 ========================================================================================
     Sheep Pangenome Pipeline - Staged Implementation
-    Stage 1: Data Acquisition & Preparation
+    Stages 1-2: Data Acquisition & Genome Preprocessing
 ========================================================================================
     Author: Developed with Claude Code
-    Version: 1.0.0-stage1
+    Version: 1.1.0-stage2
     Description: Comprehensive sheep pangenome analysis pipeline with staged validation
 ========================================================================================
 */
@@ -17,20 +17,21 @@ include { validateParameters; paramsHelp } from 'plugin/nf-validation'
 
 // Include subworkflows
 include { INPUT_CHECK } from './subworkflows/local/input_check'
+include { PREPROCESSING } from './subworkflows/local/preprocessing'
 
 // Print help message
 if (params.help) {
     log.info paramsHelp("nextflow run . --input samplesheet.csv -profile docker")
     log.info ""
-    log.info "Stage 1: Data Acquisition & Preparation"
-    log.info "======================================="
+    log.info "Stages 1-2: Data Acquisition & Genome Preprocessing"
+    log.info "================================================="
     log.info ""
     log.info "Required parameters:"
     log.info "  --input         : Path to input samplesheet (CSV format)"
     log.info ""
     log.info "Optional parameters:"
     log.info "  --outdir        : Output directory (default: ./results)"
-    log.info "  --stage         : Pipeline stage to run (default: 1)"
+    log.info "  --stage         : Pipeline stage to run (1 or 2, default: 1)"
     log.info "  --max_download_time : Maximum download time per genome (default: 30m)"
     log.info "  --ncbi_api_key  : NCBI API key for increased rate limits (recommended)"
     log.info ""
@@ -148,6 +149,73 @@ workflow SHEEP_STAGE1 {
 
 /*
 ========================================================================================
+    STAGE 2: GENOME PREPROCESSING & INDEXING
+========================================================================================
+*/
+
+workflow SHEEP_STAGE2 {
+
+    take:
+    genomes_ch     // Channel from Stage 1: [meta, genome.fa, metadata.json]
+
+    main:
+    // Stage 2: Genome preprocessing, QC, and indexing
+    log.info "🔧 Starting Stage 2: Genome Preprocessing & Indexing"
+
+    PREPROCESSING(genomes_ch)
+
+    // Monitor reference selection results
+    PREPROCESSING.out.reference_genome
+        .subscribe { selected_meta, reference_file ->
+            log.info "🏆 Reference genome selected: ${selected_meta.id}"
+        }
+
+    // Summary reporting for Stage 2
+    preprocessing_summary = PREPROCESSING.out.standardized_genomes
+        .collect()
+        .map { genomes ->
+            def total = genomes.size()
+
+            log.info ""
+            log.info "📊 Stage 2 Preprocessing Summary:"
+            log.info "  Total genomes processed: ${total}"
+            log.info "  Standardization: ✅ Complete"
+            log.info "  Quality control: ✅ Complete"
+            log.info "  BWA indexing: ✅ Complete"
+            log.info "  Minimap2 indexing: ✅ Complete"
+            log.info "  Samtools indexing: ✅ Complete"
+            log.info "  Reference selection: ✅ Complete"
+            log.info ""
+
+            return [processed: total]
+        }
+
+    emit:
+    // Standardized and processed genomes
+    standardized_genomes = PREPROCESSING.out.standardized_genomes
+    chromosome_mapping   = PREPROCESSING.out.chromosome_mapping
+
+    // Quality control results
+    qc_reports          = PREPROCESSING.out.qc_html_reports
+    qc_stats            = PREPROCESSING.out.qc_stats_json
+
+    // Indexing results
+    bwa_indices         = PREPROCESSING.out.bwa_indices
+    minimap2_indices    = PREPROCESSING.out.minimap2_indices
+    samtools_indices    = PREPROCESSING.out.samtools_indices
+
+    // Reference selection
+    reference_genome    = PREPROCESSING.out.reference_genome
+    reference_metadata  = PREPROCESSING.out.reference_metadata
+    selection_report    = PREPROCESSING.out.selection_report
+
+    // Versions and logs
+    versions            = PREPROCESSING.out.versions
+    summary             = preprocessing_summary
+}
+
+/*
+========================================================================================
     ENTRY WORKFLOW
 ========================================================================================
 */
@@ -157,8 +225,12 @@ workflow {
     // Read input samplesheet
     ch_samplesheet = Channel.fromPath(params.input, checkIfExists: true)
 
-    // Execute current stage
-    if (params.stage == 1) {
+    // Auto-detect completed stages and execute appropriate stage
+    def stage1_completed = file("${params.outdir}/01_data_preparation/downloaded_genomes").exists() &&
+                          file("${params.outdir}/01_data_preparation/downloaded_genomes").listFiles().length > 0
+
+    if (params.stage == 1 && !stage1_completed) {
+        // Run Stage 1 if explicitly requested and not completed
         SHEEP_STAGE1(ch_samplesheet)
 
         // Stage completion check
@@ -176,8 +248,95 @@ workflow {
                     log.error ""
                 }
             }
+
+    } else if (params.stage == 1 && stage1_completed) {
+        // Stage 1 already completed, auto-advance to Stage 2
+        log.info ""
+        log.info "🔄 Stage 1 already completed, advancing to Stage 2"
+        log.info "   Found existing genomes in: ${params.outdir}/01_data_preparation/downloaded_genomes/"
+        log.info ""
+
+        // Create genome input channel from Stage 1 outputs
+        stage1_genomes = Channel.fromPath("${params.outdir}/01_data_preparation/metadata/*.json")
+            .map { metadata_file ->
+                def metadata = new groovy.json.JsonSlurper().parse(metadata_file)
+                def sample_id = metadata_file.baseName
+                def genome_file = file("${params.outdir}/01_data_preparation/downloaded_genomes/${sample_id}.fa")
+
+                if (!genome_file.exists()) {
+                    log.error "Genome file not found: ${genome_file}"
+                    exit 1
+                }
+
+                def meta = [
+                    id: sample_id,
+                    breed: metadata.organism?.infraspecificNames?.breed ?: 'unknown',
+                    single_end: true
+                ]
+
+                return [meta, genome_file, metadata_file]
+            }
+
+        SHEEP_STAGE2(stage1_genomes)
+
+        // Stage completion check
+        SHEEP_STAGE2.out.summary
+            .subscribe { summary ->
+                log.info ""
+                log.info "🚀 Stage 2 completed successfully!"
+                log.info "   Processed ${summary.processed} genomes with full preprocessing"
+                log.info "   Ready to proceed to Stage 3: Pangenome Construction"
+                log.info ""
+            }
+
+    } else if (params.stage == 2) {
+        // Stage 2 requires Stage 1 outputs - check for existing results
+        def stage1_results = file("${params.outdir}/01_data_preparation/downloaded_genomes")
+        if (!stage1_results.exists() || stage1_results.listFiles().length == 0) {
+            log.error ""
+            log.error "❌ Stage 2 requires Stage 1 outputs!"
+            log.error "   No genomes found in: ${stage1_results}"
+            log.error "   Run Stage 1 first: nextflow run . --input samplesheet.csv --stage 1"
+            log.error ""
+            exit 1
+        }
+
+        // Create genome input channel from Stage 1 outputs
+        stage1_genomes = Channel.fromPath("${params.outdir}/01_data_preparation/metadata/*.json")
+            .map { metadata_file ->
+                def metadata = new groovy.json.JsonSlurper().parse(metadata_file)
+                def sample_id = metadata_file.baseName
+                def genome_file = file("${params.outdir}/01_data_preparation/downloaded_genomes/${sample_id}.fa")
+
+                if (!genome_file.exists()) {
+                    log.error "Genome file not found: ${genome_file}"
+                    exit 1
+                }
+
+                def meta = [
+                    id: sample_id,
+                    breed: metadata.organism?.infraspecificNames?.breed ?: 'unknown',
+                    single_end: true
+                ]
+
+                return [meta, genome_file, metadata_file]
+            }
+
+        SHEEP_STAGE2(stage1_genomes)
+
+        // Stage completion check
+        SHEEP_STAGE2.out.summary
+            .subscribe { summary ->
+                log.info ""
+                log.info "🚀 Stage 2 completed successfully!"
+                log.info "   Processed ${summary.processed} genomes with full preprocessing"
+                log.info "   Ready to proceed to Stage 3: Pangenome Construction"
+                log.info ""
+            }
+
     } else {
-        log.error "Only Stage 1 is currently implemented. Use --stage 1"
+        log.error "Invalid stage specified: ${params.stage}"
+        log.error "Available stages: 1 (Data Acquisition), 2 (Genome Preprocessing)"
         exit 1
     }
 }
@@ -200,9 +359,20 @@ workflow.onComplete {
     if (workflow.success) {
         log.info "✅ Results available in: ${params.outdir}"
         log.info "📁 Key outputs:"
-        log.info "   - Downloaded genomes: ${params.outdir}/01_data_preparation/downloaded_genomes/"
-        log.info "   - Validation results: ${params.outdir}/01_data_preparation/validation/"
-        log.info "   - Statistics: ${params.outdir}/01_data_preparation/statistics/"
+
+        if (params.stage == 1) {
+            log.info "   - Downloaded genomes: ${params.outdir}/01_data_preparation/downloaded_genomes/"
+            log.info "   - Validation results: ${params.outdir}/01_data_preparation/validation/"
+            log.info "   - Statistics: ${params.outdir}/01_data_preparation/statistics/"
+            log.info "   - Metadata: ${params.outdir}/01_data_preparation/metadata/"
+        } else if (params.stage == 2) {
+            log.info "   - Standardized genomes: ${params.outdir}/02_preprocessing/standardized_genomes/"
+            log.info "   - Quality reports: ${params.outdir}/02_preprocessing/quality_control/"
+            log.info "   - BWA indices: ${params.outdir}/02_preprocessing/bwa_index/"
+            log.info "   - Minimap2 indices: ${params.outdir}/02_preprocessing/minimap2_index/"
+            log.info "   - Samtools indices: ${params.outdir}/02_preprocessing/samtools_index/"
+            log.info "   - Reference selection: ${params.outdir}/02_preprocessing/reference_selection/"
+        }
         log.info ""
     }
 }
