@@ -10,7 +10,7 @@
 process SELECT_REFERENCE {
     label 'process_low'
 
-    container 'biocontainers/python:3.9--1'
+    container 'python:3.9-slim'
 
     publishDir "${params.outdir}/02_preprocessing/reference_selection", mode: params.publish_dir_mode
 

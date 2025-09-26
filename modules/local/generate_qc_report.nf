@@ -11,7 +11,7 @@ process GENERATE_QC_REPORT {
     tag "$meta.id"
     label 'process_low'
 
-    container 'biocontainers/python:3.9--1'
+    container 'python:3.9-slim'
 
     publishDir "${params.outdir}/02_preprocessing/qc_reports", mode: params.publish_dir_mode,
         saveAs: { filename ->

@@ -2,7 +2,7 @@ process STANDARDIZE_GENOME {
     tag "$meta.id"
     label 'process_medium'
 
-    container "quay.io/biocontainers/python:3.9--1"
+    container "python:3.9-slim"
 
     input:
     tuple val(meta), path(fasta), path(metadata)
