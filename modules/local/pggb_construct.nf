@@ -34,6 +34,10 @@ process PGGB_CONSTRUCT {
     def threads = task.cpus
     def memory = "${task.memory.toGiga()}g"
 
+    // Count number of genomes to set haplotype count
+    def genome_count = genomes.size()
+    def n_haplotypes = genome_count  // One haplotype per genome
+
     """
     echo "🧬 Starting PGGB pangenome graph construction"
     echo "📊 Parameters: segment=${segment_length}, block=${block_length}, identity=${identity_threshold}%"
@@ -72,29 +76,15 @@ process PGGB_CONSTRUCT {
     echo "   Segment length: ${segment_length}bp, Block length: ${block_length}bp"
     echo "   Identity threshold: ${identity_threshold}%, Mappings: ${n_mappings}"
 
+    # Run PGGB with basic parameters
     pggb \\
         -i genomes.fa.gz \\
         -o pggb_output \\
-        -n \$(echo ${genomes} | wc -w) \\
         -t ${threads} \\
         -p ${identity_threshold} \\
         -s ${segment_length} \\
         -l ${block_length} \\
-        -P asm20 \\
-        -O 0.001 \\
-        -T ${threads} \\
-        -k 19 \\
-        -N \\
-        -A \\
-        -Y \\
-        -v \\
-        -L \\
-        -S \\
-        --wfmash-params "${wfmash_params}" \\
-        --map-pct-id ${map_pct_id} \\
-        --n-mappings ${n_mappings} \\
-        --smoothxg-ratio ${smoothxg_ratio} \\
-        ${args}
+        -n ${n_haplotypes}
 
     # Move and rename key outputs
     echo "📦 Organizing outputs"

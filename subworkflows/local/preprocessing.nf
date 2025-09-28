@@ -13,7 +13,7 @@ include { GENOME_QC_EXTENDED      } from '../../modules/local/genome_qc_extended
 include { BWA_INDEX               } from '../../modules/local/bwa_index'
 include { MINIMAP2_INDEX          } from '../../modules/local/minimap2_index'
 include { SAMTOOLS_FAIDX          } from '../../modules/local/samtools_faidx'
-include { SELECT_REFERENCE        } from '../../modules/local/select_reference'
+include { SELECT_REFERENCE_MANUAL  } from '../../modules/local/select_reference_manual'
 
 workflow PREPROCESSING {
     take:
@@ -48,7 +48,7 @@ workflow PREPROCESSING {
     genomes_for_indexing = STANDARDIZE_GENOME.out.fasta
 
     //
-    // MODULE: Create BWA index for short-read validation
+    // MODULE: Create BWA-MEM2 index for short-read validation (multi-threaded)
     //
     BWA_INDEX(
         genomes_for_indexing
@@ -71,23 +71,36 @@ workflow PREPROCESSING {
     )
     ch_versions = ch_versions.mix(SAMTOOLS_FAIDX.out.versions)
 
-    // Combine all data for reference selection
-    // Each genome needs: [meta, genome.fa, stats.json, metadata.json]
-    combined_genome_data = STANDARDIZE_GENOME.out.fasta
-        .join(GENOME_QC_EXTENDED.out.stats, by: 0)
-        .join(genome_input_ch.map { meta, fasta, metadata -> [meta, metadata] }, by: 0)
-        .map { meta, std_fasta, stats_json, metadata ->
-            [meta, std_fasta, stats_json, metadata]
-        }
-        .collect()
+    //
+    // MODULE: Select reference genome manually (optional)
+    //
+    if (params.enable_reference_selection) {
+        // Prepare data for manual reference selection
+        // Collect all standardized genomes and QC stats for manual selection
+        reference_selection_data = STANDARDIZE_GENOME.out.fasta
+            .join(GENOME_QC_EXTENDED.out.stats, by: 0)
+            .collect()
+            .map { collected_data ->
+                def genome_files = collected_data.collect { it[1] }
+                def stats_files = collected_data.collect { it[2] }
+                [collected_data[0][0], genome_files, stats_files]  // Use first meta as representative
+            }
 
-    //
-    // MODULE: Select optimal reference genome
-    //
-    SELECT_REFERENCE(
-        combined_genome_data
-    )
-    ch_versions = ch_versions.mix(SELECT_REFERENCE.out.versions)
+        SELECT_REFERENCE_MANUAL(
+            reference_selection_data
+        )
+        ch_versions = ch_versions.mix(SELECT_REFERENCE_MANUAL.out.versions)
+
+        // Set reference outputs when enabled
+        reference_genome_out = SELECT_REFERENCE_MANUAL.out.reference_genome
+        reference_metadata_out = SELECT_REFERENCE_MANUAL.out.reference_metadata
+        reference_report_out = SELECT_REFERENCE_MANUAL.out.selection_report
+    } else {
+        // Create empty channels when reference selection is disabled
+        reference_genome_out = Channel.empty()
+        reference_metadata_out = Channel.empty()
+        reference_report_out = Channel.empty()
+    }
 
     // Create comprehensive output channels
     preprocessed_genomes = STANDARDIZE_GENOME.out.fasta
@@ -110,17 +123,17 @@ workflow PREPROCESSING {
     qc_logs              = GENOME_QC_EXTENDED.out.log              // [meta, log.txt]
 
     // Indexing results
-    bwa_indices          = BWA_INDEX.out.index                      // [meta, bwa_files]
+    bwa_indices          = BWA_INDEX.out.index                      // [meta, bwa-mem2_files]
     bwa_logs             = BWA_INDEX.out.log                        // [meta, log.txt]
     minimap2_indices     = MINIMAP2_INDEX.out.index                 // [meta, .mmi]
     minimap2_logs        = MINIMAP2_INDEX.out.log                   // [meta, log.txt]
     samtools_indices     = SAMTOOLS_FAIDX.out.index                 // [meta, .fai]
     samtools_logs        = SAMTOOLS_FAIDX.out.log                   // [meta, log.txt]
 
-    // Reference selection results
-    reference_genome     = SELECT_REFERENCE.out.reference_genome    // [selected_meta, reference.fa]
-    reference_metadata   = SELECT_REFERENCE.out.reference_metadata  // reference_metadata.json
-    selection_report     = SELECT_REFERENCE.out.selection_report    // selection_report.json
+    // Reference selection results (optional)
+    reference_genome     = reference_genome_out     // [selected_meta, reference.fa] or empty
+    reference_metadata   = reference_metadata_out   // reference_metadata.json or empty
+    selection_report     = reference_report_out     // selection_report.json or empty
 
     // Complete preprocessed data
     preprocessed_genomes = preprocessed_genomes                     // All data combined
@@ -129,11 +142,4 @@ workflow PREPROCESSING {
     versions             = ch_versions                              // versions.yml
 }
 
-workflow.onError {
-    log.error "Stage 2 Preprocessing workflow failed: ${workflow.errorMessage}"
-}
-
-workflow.onComplete {
-    log.info "Stage 2 Preprocessing completed successfully"
-    log.info "Reference genome selected and all genomes standardized and indexed"
-}
+// Completion handlers removed to prevent false completion messages

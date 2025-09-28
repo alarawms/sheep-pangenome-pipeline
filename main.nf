@@ -182,7 +182,7 @@ workflow SHEEP_STAGE2 {
             log.info "  Total genomes processed: ${total}"
             log.info "  Standardization: ✅ Complete"
             log.info "  Quality control: ✅ Complete"
-            log.info "  BWA indexing: ✅ Complete"
+            log.info "  BWA-MEM2 indexing: ✅ Complete"
             log.info "  Minimap2 indexing: ✅ Complete"
             log.info "  Samtools indexing: ✅ Complete"
             log.info "  Reference selection: ✅ Complete"
@@ -321,44 +321,15 @@ workflow {
             }
 
     } else if (params.stage == 1 && stage1_completed) {
-        // Stage 1 already completed, auto-advance to Stage 2
+        // Stage 1 already completed, advise manual Stage 2 execution
         log.info ""
-        log.info "🔄 Stage 1 already completed, advancing to Stage 2"
+        log.info "ℹ️  Stage 1 already completed"
         log.info "   Found existing genomes in: ${params.outdir}/01_data_preparation/downloaded_genomes/"
+        log.info "   Run Stage 2: nextflow run . --input sheep_samples.csv --stage 2 -resume"
         log.info ""
 
-        // Create genome input channel from Stage 1 outputs
-        stage1_genomes = Channel.fromPath("${params.outdir}/01_data_preparation/metadata/*.json")
-            .map { metadata_file ->
-                def metadata = new groovy.json.JsonSlurper().parse(metadata_file)
-                def sample_id = metadata_file.baseName
-                def genome_file = file("${params.outdir}/01_data_preparation/downloaded_genomes/${sample_id}.fa")
-
-                if (!genome_file.exists()) {
-                    log.error "Genome file not found: ${genome_file}"
-                    exit 1
-                }
-
-                def meta = [
-                    id: sample_id,
-                    breed: metadata.organism?.infraspecificNames?.breed ?: 'unknown',
-                    single_end: true
-                ]
-
-                return [meta, genome_file, metadata_file]
-            }
-
-        SHEEP_STAGE2(stage1_genomes)
-
-        // Stage completion check
-        SHEEP_STAGE2.out.summary
-            .subscribe { summary ->
-                log.info ""
-                log.info "🚀 Stage 2 completed successfully!"
-                log.info "   Processed ${summary.processed} genomes with full preprocessing"
-                log.info "   Ready to proceed to Stage 3: Pangenome Construction"
-                log.info ""
-            }
+        // Prevent workflow completion messages by exiting immediately
+        System.exit(0)
 
     } else if (params.stage == 2) {
         // Stage 2 requires Stage 1 outputs - check for existing results
@@ -395,13 +366,13 @@ workflow {
 
         SHEEP_STAGE2(stage1_genomes)
 
-        // Stage completion check
+        // Stage 2 completion check
         SHEEP_STAGE2.out.summary
             .subscribe { summary ->
                 log.info ""
                 log.info "🚀 Stage 2 completed successfully!"
                 log.info "   Processed ${summary.processed} genomes with full preprocessing"
-                log.info "   Ready to proceed to Stage 3: Pangenome Construction"
+                log.info "   Run Stage 3: nextflow run . --input sheep_samples.csv --stage 3 -resume"
                 log.info ""
             }
 
@@ -419,11 +390,12 @@ workflow {
             exit 1
         }
 
-        if (!stage2_reference.exists()) {
+        // Check if reference selection was enabled in Stage 2
+        if (params.enable_reference_selection && !stage2_reference.exists()) {
             log.error ""
-            log.error "❌ Stage 3 requires reference selection from Stage 2!"
+            log.error "❌ Reference selection was enabled but no reference metadata found!"
             log.error "   Reference metadata not found: ${stage2_reference}"
-            log.error "   Ensure Stage 2 completed successfully"
+            log.error "   Ensure Stage 2 completed successfully with reference selection"
             log.error ""
             exit 1
         }
@@ -438,11 +410,23 @@ workflow {
                     stage: 'graph_construction'
                 ]
 
+                log.info "🔍 Debug: Found genome file: ${genome_file} -> sample: ${sample_id}"
                 return [meta, genome_file]
             }
 
-        // Reference metadata channel
-        reference_metadata = Channel.fromPath(stage2_reference, checkIfExists: true)
+        // Reference metadata channel (optional) - create a simple empty file since GRAPH_CONSTRUCTION expects it
+        if (params.enable_reference_selection && stage2_reference.exists()) {
+            reference_metadata = Channel.fromPath(stage2_reference, checkIfExists: true)
+            log.info "   Using reference selection from Stage 2"
+        } else {
+            // Create empty reference metadata for GRAPH_CONSTRUCTION compatibility
+            reference_metadata = Channel.fromPath("${params.outdir}/assets/empty_reference.json", checkIfExists: false)
+                .ifEmpty {
+                    log.info "   Creating empty reference metadata file for compatibility"
+                    Channel.fromPath("assets/empty_reference.json", checkIfExists: true)
+                }
+            log.info "   No reference selection (disabled in configuration)"
+        }
 
         log.info ""
         log.info "🧬 Starting Stage 3: Pangenome Graph Construction"
@@ -463,39 +447,15 @@ workflow {
             }
 
     } else if (params.stage == 2 && stage2_completed) {
-        // Stage 2 already completed, auto-advance to Stage 3
+        // Stage 2 already completed, advise manual Stage 3 execution
         log.info ""
-        log.info "🔄 Stage 2 already completed, advancing to Stage 3"
+        log.info "ℹ️  Stage 2 already completed"
         log.info "   Found existing standardized genomes in: ${params.outdir}/02_preprocessing/standardized_genomes/"
+        log.info "   Run Stage 3: nextflow run . --input sheep_samples.csv --stage 3 -resume"
         log.info ""
 
-        // Create genome input channels from Stage 2 outputs
-        stage2_genomes = Channel.fromPath("${params.outdir}/02_preprocessing/standardized_genomes/*_standardized.fa")
-            .map { genome_file ->
-                def sample_id = genome_file.baseName.replace('_standardized', '')
-                def meta = [
-                    id: sample_id,
-                    single_end: true,
-                    stage: 'graph_construction'
-                ]
-
-                return [meta, genome_file]
-            }
-
-        // Reference metadata channel
-        reference_metadata = Channel.fromPath("${params.outdir}/02_preprocessing/reference_selection/reference_metadata.json", checkIfExists: true)
-
-        SHEEP_STAGE3(stage2_genomes, reference_metadata)
-
-        // Stage completion check
-        SHEEP_STAGE3.out.summary
-            .subscribe { summary ->
-                log.info ""
-                log.info "🚀 Stage 3 completed successfully!"
-                log.info "   Pangenome graph constructed (${summary.graph_size_mb} MB)"
-                log.info "   Ready to proceed to Stage 4: Graph Analysis & Variant Calling"
-                log.info ""
-            }
+        // Prevent workflow completion messages by exiting immediately
+        System.exit(0)
 
     } else {
         log.error "Invalid stage specified: ${params.stage}"
@@ -531,7 +491,7 @@ workflow.onComplete {
         } else if (params.stage == 2) {
             log.info "   - Standardized genomes: ${params.outdir}/02_preprocessing/standardized_genomes/"
             log.info "   - Quality reports: ${params.outdir}/02_preprocessing/quality_control/"
-            log.info "   - BWA indices: ${params.outdir}/02_preprocessing/bwa_index/"
+            log.info "   - BWA-MEM2 indices: ${params.outdir}/02_preprocessing/bwa_mem2_index/"
             log.info "   - Minimap2 indices: ${params.outdir}/02_preprocessing/minimap2_index/"
             log.info "   - Samtools indices: ${params.outdir}/02_preprocessing/samtools_index/"
             log.info "   - Reference selection: ${params.outdir}/02_preprocessing/reference_selection/"

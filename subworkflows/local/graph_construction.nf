@@ -26,8 +26,11 @@ workflow GRAPH_CONSTRUCTION {
     //
     // Collect all standardized genomes into single input for PGGB
     genomes_for_pggb = standardized_genomes_ch
-        .map { meta, fasta -> fasta }
-        .collect()
+        .map { meta, fasta ->
+            log.info "🧬 Subworkflow received genome: ${meta.id} -> ${fasta}"
+            return fasta
+        }
+        .toList()
         .map { fasta_files ->
             // Create meta for pangenome
             def pangenome_meta = [
@@ -35,6 +38,7 @@ workflow GRAPH_CONSTRUCTION {
                 genome_count: fasta_files.size(),
                 stage: "graph_construction"
             ]
+            log.info "🔧 PGGB input prepared: ${fasta_files.size()} genomes -> ${fasta_files}"
             [pangenome_meta, fasta_files]
         }
 
@@ -42,8 +46,7 @@ workflow GRAPH_CONSTRUCTION {
     // MODULE: PGGB pangenome graph construction
     //
     PGGB_CONSTRUCT(
-        genomes_for_pggb,
-        reference_metadata_ch
+        genomes_for_pggb
     )
     ch_versions = ch_versions.mix(PGGB_CONSTRUCT.out.versions)
 
@@ -94,17 +97,4 @@ workflow GRAPH_CONSTRUCTION {
     versions             = ch_versions                           // versions.yml
 }
 
-workflow.onError {
-    log.error "Stage 3 Graph Construction workflow failed: ${workflow.errorMessage}"
-    log.error "Common issues:"
-    log.error "  - Insufficient memory for PGGB (requires 64GB+ for large genomes)"
-    log.error "  - PGGB container not available or network issues"
-    log.error "  - Input genomes not properly standardized"
-    log.error "  - Graph complexity too high for available resources"
-}
-
-workflow.onComplete {
-    log.info "Stage 3 Graph Construction completed successfully"
-    log.info "Pangenome graph constructed and validated"
-    log.info "Next stage: Variant calling and comparative analysis"
-}
+// Completion handlers removed to prevent false completion messages

@@ -308,7 +308,7 @@ process {
         memory = '150.GB'
         time   = '48.h'
         queue  = 'long'
-        clusterOptions = '--partition=long --exclusive'
+        clusterOptions = '--partition=batch --exclusive'
     }
     
     // Download processes
