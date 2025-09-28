@@ -12,7 +12,7 @@ process CREATE_BWA_INDEX {
     label 'process_high'
     label 'process_long'
 
-    container 'biocontainers/bwa-mem2:2.2.1--he513fc3_0'
+    container 'quay.io/biocontainers/bwa-mem2:2.2.1--he513fc3_0'
 
     publishDir "${params.outdir}/02_preprocessing/indices/bwa", mode: params.publish_dir_mode,
         saveAs: { filename ->

@@ -11,7 +11,7 @@ process NORMALIZE_HEADERS {
     tag "$meta.id"
     label 'process_low'
 
-    container 'biocontainers/biopython:1.79'
+    container 'quay.io/biocontainers/biopython:1.79'
 
     publishDir "${params.outdir}/02_preprocessing/standardized", mode: params.publish_dir_mode,
         saveAs: { filename ->

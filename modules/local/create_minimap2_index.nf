@@ -12,7 +12,7 @@ process CREATE_MINIMAP2_INDEX {
     label 'process_medium'
     label 'process_long'
 
-    container 'biocontainers/minimap2:2.24--h7132678_1'
+    container 'quay.io/biocontainers/minimap2:2.30--h577a1d6_0'
 
     publishDir "${params.outdir}/02_preprocessing/indices/minimap2", mode: params.publish_dir_mode,
         saveAs: { filename ->

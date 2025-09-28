@@ -6,7 +6,6 @@ process PGGB_CONSTRUCT {
 
     input:
     tuple val(meta), path(genomes)
-    path(reference_metadata)
 
     output:
     tuple val(meta), path("*.gfa")           , emit: graph
@@ -25,9 +24,13 @@ process PGGB_CONSTRUCT {
     def prefix = task.ext.prefix ?: "sheep_pangenome"
 
     // PGGB parameters optimized for sheep genomes
-    def segment_length = params.pggb_segment_length ?: 5000
-    def block_length = params.pggb_block_length ?: 3000
-    def identity_threshold = params.pggb_identity_threshold ?: 90
+    def segment_length = params.pggb_segment_length ?: 10000
+    def block_length = params.pggb_block_length ?: 5000
+    def identity_threshold = params.pggb_identity_threshold ?: 95
+    def map_pct_id = params.pggb_map_pct_id ?: 95
+    def n_mappings = params.pggb_n_mappings ?: 10
+    def wfmash_params = params.pggb_wfmash_params ?: '--hg-filter-ani-diff 30 --merge-segments'
+    def smoothxg_ratio = params.smoothxg_ratio ?: 10
     def threads = task.cpus
     def memory = "${task.memory.toGiga()}g"
 
@@ -35,27 +38,40 @@ process PGGB_CONSTRUCT {
     echo "🧬 Starting PGGB pangenome graph construction"
     echo "📊 Parameters: segment=${segment_length}, block=${block_length}, identity=${identity_threshold}%"
 
+    # Using de novo construction
+    echo "📋 Using de novo pangenome construction"
+    REFERENCE_GUIDED=false
+
     # Create output directory
     mkdir -p pggb_output
 
     # Combine all genomes into single input file for PGGB
     echo "📋 Preparing genome input file"
-    rm -f genomes.fa.gz
+    rm -f combined_genomes.fa genomes.fa.gz
     for genome in ${genomes}; do
         echo "Processing \$genome"
         # Extract sample name from filename and add to headers
         sample_name=\$(basename \$genome .fa | sed 's/_standardized//')
 
-        # Add sample prefix to sequence headers and append
-        sed "s/^>/>\$sample_name#/" \$genome >> combined_genomes.fa
+        # Use awk for faster header modification on large files
+        awk -v prefix="\$sample_name#" '/^>/ {print ">" prefix substr(\$0,2); next} {print}' \$genome >> combined_genomes.fa
     done
 
-    # Compress input for PGGB
-    bgzip -c combined_genomes.fa > genomes.fa.gz
-    samtools faidx genomes.fa.gz
+    # Compress input for PGGB (use gzip if bgzip not available)
+    if command -v bgzip >/dev/null 2>&1; then
+        bgzip -c combined_genomes.fa > genomes.fa.gz
+        if command -v samtools >/dev/null 2>&1; then
+            samtools faidx genomes.fa.gz
+        fi
+    else
+        gzip -c combined_genomes.fa > genomes.fa.gz
+    fi
 
     # Run PGGB with sheep-optimized parameters
-    echo "🔧 Running PGGB graph construction"
+    echo "🔧 Running PGGB graph construction with sheep-optimized parameters"
+    echo "   Segment length: ${segment_length}bp, Block length: ${block_length}bp"
+    echo "   Identity threshold: ${identity_threshold}%, Mappings: ${n_mappings}"
+
     pggb \\
         -i genomes.fa.gz \\
         -o pggb_output \\
@@ -67,9 +83,17 @@ process PGGB_CONSTRUCT {
         -P asm20 \\
         -O 0.001 \\
         -T ${threads} \\
+        -k 19 \\
+        -N \\
+        -A \\
+        -Y \\
         -v \\
         -L \\
         -S \\
+        --wfmash-params "${wfmash_params}" \\
+        --map-pct-id ${map_pct_id} \\
+        --n-mappings ${n_mappings} \\
+        --smoothxg-ratio ${smoothxg_ratio} \\
         ${args}
 
     # Move and rename key outputs

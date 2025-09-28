@@ -12,7 +12,7 @@ process RENAME_CHROMOSOMES {
     label 'process_medium'
     label 'process_long'
 
-    container 'biocontainers/biopython:1.79'
+    container 'quay.io/biocontainers/biopython:1.79'
 
     publishDir "${params.outdir}/02_preprocessing/chromosome_mapping", mode: params.publish_dir_mode,
         saveAs: { filename ->

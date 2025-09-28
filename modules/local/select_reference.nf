@@ -15,7 +15,7 @@ process SELECT_REFERENCE {
     publishDir "${params.outdir}/02_preprocessing/reference_selection", mode: params.publish_dir_mode
 
     input:
-    val(combined_genome_data)  // List of [meta, genome.fa, stats.json, metadata.json]
+    tuple val(meta_list), path(genome_files), path(stats_files), path(metadata_files)
 
     output:
     tuple val(selected_meta), path("selected_reference.fa")  , emit: reference_genome
@@ -24,6 +24,11 @@ process SELECT_REFERENCE {
     path "versions.yml"                                     , emit: versions
 
     script:
+    def meta_json = groovy.json.JsonBuilder(meta_list).toString()
+    def genome_list = genome_files.collect{ "'${it}'" }.join(',')
+    def stats_list = stats_files.collect{ "'${it}'" }.join(',')
+    def metadata_list = metadata_files.collect{ "'${it}'" }.join(',')
+    """
     """
     #!/usr/bin/env python3
 
@@ -331,7 +336,21 @@ process SELECT_REFERENCE {
 
     # Main processing
     try:
-        genome_data_list = ${combined_genome_data}
+        # Parse input data
+        meta_list = json.loads('${meta_json}')
+        genome_files = [${genome_list}]
+        stats_files = [${stats_list}]
+        metadata_files = [${metadata_list}]
+
+        # Create genome_data_list for processing
+        genome_data_list = []
+        for i, meta in enumerate(meta_list):
+            genome_data_list.append([
+                meta,
+                genome_files[i],
+                stats_files[i],
+                metadata_files[i]
+            ])
 
         print(f"Starting reference genome selection process")
         print(f"Candidates received: {len(genome_data_list)}")

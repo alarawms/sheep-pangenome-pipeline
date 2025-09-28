@@ -1,8 +1,8 @@
 process MINIMAP2_INDEX {
     tag "$meta.id"
-    label 'process_medium'
+    label 'process_high'
 
-    container "quay.io/biocontainers/minimap2:2.28--he4a0461_2"
+    container "quay.io/biocontainers/minimap2:2.30--h577a1d6_0"
 
     input:
     tuple val(meta), path(fasta)
@@ -22,13 +22,18 @@ process MINIMAP2_INDEX {
     """
     echo "🔧 Creating minimap2 index for ${meta.id}" | tee minimap2_index_log.txt
     echo "Input: ${fasta}" >> minimap2_index_log.txt
+    echo "Using ${task.cpus} threads for optimized indexing" >> minimap2_index_log.txt
+    echo "Memory available: ${task.memory}" >> minimap2_index_log.txt
     echo "Started: \$(date)" >> minimap2_index_log.txt
     echo "" >> minimap2_index_log.txt
 
-    # Create minimap2 index
+    # Create minimap2 index with optimized parameters for 3GB genomes
     minimap2 \\
         ${args} \\
         -t ${task.cpus} \\
+        -k 19 \\
+        -w 10 \\
+        -I 8G \\
         -d ${prefix}.mmi \\
         ${fasta} \\
         2>&1 | tee -a minimap2_index_log.txt

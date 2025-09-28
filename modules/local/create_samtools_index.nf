@@ -11,7 +11,7 @@ process CREATE_SAMTOOLS_INDEX {
     tag "$meta.id"
     label 'process_low'
 
-    container 'biocontainers/samtools:1.17--h00cdaf9_0'
+    container 'quay.io/biocontainers/samtools:1.17--h00cdaf9_0'
 
     publishDir "${params.outdir}/02_preprocessing/indices/samtools", mode: params.publish_dir_mode,
         saveAs: { filename ->

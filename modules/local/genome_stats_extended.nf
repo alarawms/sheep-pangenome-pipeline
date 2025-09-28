@@ -11,7 +11,7 @@ process GENOME_STATS_EXTENDED {
     tag "$meta.id"
     label 'process_medium'
 
-    container 'biocontainers/seqkit:2.3.1--h9ee0642_0'
+    container 'quay.io/biocontainers/seqkit:2.3.1--h9ee0642_0'
 
     publishDir "${params.outdir}/02_preprocessing/statistics", mode: params.publish_dir_mode,
         saveAs: { filename ->
